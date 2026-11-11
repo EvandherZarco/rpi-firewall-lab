@@ -24,7 +24,7 @@ Es un laboratorio para practicar acceso remoto seguro, configuración de un fire
 
 ## ¿Por qué SSH con llave y no con contraseña?
 
-Con llave, ninguna contraseña viaja por la red y no se puede adivinar probando combinaciones. La llave privada nunca sale de mi PC; la Pi solo tiene la llave pública. Además, la llave privada está protegida con una frase.
+Con contraseña, aunque SSH la manda cifrada, la contraseña completa llega a la Pi. Con llave, la Pi me manda un reto y mi PC lo firma con la llave privada: solo viaja la firma, nunca la llave. Además, no se puede adivinar probando combinaciones. La Pi solo tiene la llave pública, y la llave privada está protegida con una frase.
 
 ## Red
 
@@ -33,17 +33,84 @@ La Pi obtiene su IP por DHCP del módem (en mi red quedó en 192.168.1.85). Como
 
 ## Firewall con ufw
 
+- Se le asignó una politica para que niega todo lo que entra, permita todo lo que sale, y como excepción permite SSH (22/tcp) solo desde 192.168.1.0/24.
+
+- Salida de ufw status verbose:
+
+zarco@rpi-lab:~ $ sudo ufw status verbose
+Status: active
+Logging: on (low)
+Default: deny (incoming), allow (outgoing), disabled (routed)
+New profiles: skip
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW IN    192.168.1.0/24
+
+
+| Prueba | Comando | Resultado | ¿Esperado? |
+|---|---|---|---|
+| SSH por IPv4 | `ssh -4 zarco@rpi-lab.local` | Entra | Sí |
+| SSH por IPv6 por nombre | `ssh -6 ... rpi-lab.local` | Cannot assign requested address | Windows no pudo establecer la conexión con la dirección que le dio el nombre. Como no se estableció conexión con la Pi, la prueba no cuenta ni a favor ni en contra |
+| SSH por IPv6 global | `ssh -6 ... 2806:xxxx:...` | Connection timed out | Sí, bloqueado |
+
 ## Prueba de puerto bloqueado y abierto
+
+```bash
+# Pi: servidor de prueba
+python3 -m http.server 8000
+# PC: intento de conexión
+curl --max-time 5 http://192.168.1.85:8000
+# Pi: abrir y luego cerrar el puerto
+sudo ufw allow from 192.168.1.0/24 to any port 8000 proto tcp
+sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
+```
+
+| Paso | Resultado | Qué demuestra |
+|---|---|---|
+| curl con el puerto cerrado | timeout tras 5003 ms | ufw descarta en silencio (no responde "rechazado") |
+| curl con el puerto abierto | HTML + `GET / 200` en la Pi | la regla abre exactamente ese puerto |
+| curl después de borrar la regla | timeout tras 5008 ms | borrar la regla sí cierra el puerto |
+| `ufw status verbose` | solo queda el 22 | la Pi quedó como estaba |
+
 
 ## Análisis de tráfico con Wireshark
 
-## Bitácora
+### ICMP (ping)
+
+![Ping_a_la_Pi_capturado_en_Wireshark](capturas/01-icmp.png)
+
+- El Firewall NO bloque ping debido a que tiene una configuración por defecto que está por encima de estas reglas. El ping se permite para para diagnosticar, sabiendo que revela que la Pi está activa
+
+### Saludo TCP
+
+![comunicacion_por_ssh](capturas/02-handshake.png)
+
+- Muestra como la Pi habla por el puerto 22 y la PC le responde por un puerto aleatorio para evitar conflicto de direcciones
+
+### Conexión bloqueada
+
+![bloqueo_de_puertos](capturas/03-bloqueado.png)
+
+- El puerto 8000 fue bloqueado por Firewall, se ejecutó el conmando con --max-time 5 lo que le permitió hacer dos retransmisiones hasta que se agotó el tiempo. Lo que significa que la respuesta al firewall es silecion, lo que lanza el timed out
+
 
 ## Decisiones y límites
 
-### ICMP (ping)
+**Decisiones**
 
-### Saludo TCP
+- SSH solo desde mi red local (192.168.1.0/24) y sollo por IPv4.
+- La Pi responde ping a cualquier equipo de la red local. Es el comportamiento por defecto de ufw (`/etc/ufw/before.rules`, línea 37) y lo dejé así para poder diagnosticar la conexión.
+- El firewall descarta en silencio en vez de rechazar: quien escanea no recibe respuesta, solo un timeout.
+
+**Límites**
+- La IP la asigna el módem por DHCP; si cambia, los comandos con 192.168.1.85 dejan de servir. Reservarla está pendiente.
+- ufw protege solo a la Pi, no al resto de la red.
+- Las pruebas las hice desde un solo equipo, dentro de la misma red.
+- Las capturas se tomaron desde mi PC, no desde la Pi: muestran lo que mi PC envió y recibió.
+
+
+## Bitácora
 
 ### 09/11/2026: diagnóstico de hardware e instalación
 
@@ -64,4 +131,24 @@ La Pi obtiene su IP por DHCP del módem (en mi red quedó en 192.168.1.85). Como
 
 ### 10/11/2026: firewall e IPv6
 
-### 11/11/2026: pruebas y Wireshark
+**Problema:** Cuando se intentó entrar por ssh la terminal se congelo y después pidió la passphrase.
+
+**Diagnóstico:** la regla que permite SSH solo cubre mi red IPv4 (192.168.1.0/24). Al conectarme con `rpi-lab.local`, el nombre resolvía a dos IP's, una IPv4 y una IPv6. La PC intentó conectarse usando la IPv6 ya que la prefiere, sin embargo,nunca llegó a la Pi, por lo que cambió a la IPv4 y logró acceder con ella, pidiendo la passphrase.
+
+**Solución:** me conecto con `ssh -4` para forzar IPv4, y verifiqué que por IPv6 la conexión queda bloqueada.
+
+**Lo que aprendí:** un firewall tiene que cubrir IPv4 e IPv6 por separado; si solo pienso en IPv4, puede quedar una entrada que no consideré.
+
+### 11/11/2026: prueba de puerto y Wireshark
+
+**Problema 1:** para probar el puerto 8000 levanté `python3 -m http.server` en mi carpeta personal. Mientras el puerto estuvo abierto, cualquier equipo de la red podía ver mis archivos, incluidos `.ssh/` y `.bash_history`.
+
+**Lo que aprendí:** el firewall controla **quién** entra, pero no **qué** expone el servicio que abro. Para pruebas así, uso una carpeta vacía.
+
+**Problema 2:** al buscar en `/etc/ufw/before.rules` por qué el ping pasaba el firewall, `grep` respondió `Permission denied`.
+
+**Diagnóstico:** no era el firewall, sino los permisos del archivo (`-rw-r-----`, dueño `root`): mi usuario no puede leerlo.
+
+**Solución:** con `sudo grep` encontré la línea que acepta el ping entrante.
+
+**Lo que aprendí:** distinguir un error de permisos de Linux de un bloqueo de red.
