@@ -78,19 +78,19 @@ sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
 
 ### ICMP (ping)
 
-![Ping_a_la_Pi_capturado_en_Wireshark](capturas/01-icmp.png)
+![Ping_a_la_Pi_capturado_en_Wireshark](capturas/01-icmp.jpeg)
 
 - El Firewall NO bloque ping debido a que tiene una configuración por defecto que está por encima de estas reglas. El ping se permite para para diagnosticar, sabiendo que revela que la Pi está activa
 
 ### Saludo TCP
 
-![comunicacion_por_ssh](capturas/02-handshake.png)
+![comunicacion_por_ssh](capturas/02-handshake.jpeg)
 
 - Muestra como la Pi habla por el puerto 22 y la PC le responde por un puerto aleatorio para evitar conflicto de direcciones
 
 ### Conexión bloqueada
 
-![bloqueo_de_puertos](capturas/03-bloqueado.png)
+![bloqueo_de_puertos](capturas/03-bloqueado.jpeg)
 
 - El puerto 8000 fue bloqueado por Firewall, se ejecutó el conmando con --max-time 5 lo que le permitió hacer dos retransmisiones hasta que se agotó el tiempo. Lo que significa que la respuesta al firewall es silecion, lo que lanza el timed out
 
