@@ -33,10 +33,11 @@ La Pi obtiene su IP por DHCP del módem (en mi red quedó en 192.168.1.85). Como
 
 ## Firewall con ufw
 
-- Se le asignó una politica para que niega todo lo que entra, permita todo lo que sale, y como excepción permite SSH (22/tcp) solo desde 192.168.1.0/24.
+- Se le asignó una política que niega todo lo que entra, permite todo lo que sale y, como excepción, permite SSH (22/tcp) solo desde 192.168.1.0/24.
 
-- Salida de ufw status verbose:
+- Salida de `ufw status verbose`:
 
+```
 zarco@rpi-lab:~ $ sudo ufw status verbose
 Status: active
 Logging: on (low)
@@ -46,7 +47,9 @@ New profiles: skip
 To                         Action      From
 --                         ------      ----
 22/tcp                     ALLOW IN    192.168.1.0/24
+```
 
+### Pruebas de SSH por IPv4 e IPv6
 
 | Prueba | Comando | Resultado | ¿Esperado? |
 |---|---|---|---|
@@ -78,28 +81,28 @@ sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
 
 ### ICMP (ping)
 
-![Ping_a_la_Pi_capturado_en_Wireshark](capturas/01-icmp.jpeg)
+![Ping a la Pi capturado en Wireshark](capturas/01-icmp.jpeg)
 
-- El Firewall NO bloque ping debido a que tiene una configuración por defecto que está por encima de estas reglas. El ping se permite para para diagnosticar, sabiendo que revela que la Pi está activa
+- El firewall NO bloquea el ping debido a que tiene una configuración por defecto que se aplica antes que mis reglas. El ping se permite para diagnosticar, sabiendo que revela que la Pi está activa.
 
 ### Saludo TCP
 
-![comunicacion_por_ssh](capturas/02-handshake.jpeg)
+![Saludo TCP de una conexión SSH](capturas/02-handshake.jpeg)
 
-- Muestra como la Pi habla por el puerto 22 y la PC le responde por un puerto aleatorio para evitar conflicto de direcciones
+- Muestra cómo la PC inicia la conexión desde un puerto aleatorio hacia el 22 de la Pi. La Pi responde desde el 22 hacia el puerto aleatorio. El puerto aleatorio sirve para que cada conexión pueda distinguirse.
 
 ### Conexión bloqueada
 
-![bloqueo_de_puertos](capturas/03-bloqueado.jpeg)
+![Conexión al puerto 8000 bloqueada por el firewall](capturas/03-bloqueado.jpeg)
 
-- El puerto 8000 fue bloqueado por Firewall, se ejecutó el conmando con --max-time 5 lo que le permitió hacer dos retransmisiones hasta que se agotó el tiempo. Lo que significa que la respuesta al firewall es silecion, lo que lanza el timed out
+- El puerto 8000 fue bloqueado por el firewall. Se ejecutó el comando con `--max-time 5`, lo que le permitió hacer dos retransmisiones hasta que se agotó el tiempo. La respuesta del firewall es silencio, y por eso salta el timed out. Si no hubiera firewall, la Pi habría contestado con RST al instante; el silencio es la huella del firewall.
 
 
 ## Decisiones y límites
 
 **Decisiones**
 
-- SSH solo desde mi red local (192.168.1.0/24) y sollo por IPv4.
+- SSH solo desde mi red local (192.168.1.0/24) y solo por IPv4.
 - La Pi responde ping a cualquier equipo de la red local. Es el comportamiento por defecto de ufw (`/etc/ufw/before.rules`, línea 37) y lo dejé así para poder diagnosticar la conexión.
 - El firewall descarta en silencio en vez de rechazar: quien escanea no recibe respuesta, solo un timeout.
 
@@ -131,9 +134,9 @@ sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
 
 ### 10/11/2026: firewall e IPv6
 
-**Problema:** Cuando se intentó entrar por ssh la terminal se congelo y después pidió la passphrase.
+**Problema:** cuando se intentó entrar por SSH, la terminal se congeló y después pidió la passphrase.
 
-**Diagnóstico:** la regla que permite SSH solo cubre mi red IPv4 (192.168.1.0/24). Al conectarme con `rpi-lab.local`, el nombre resolvía a dos IP's, una IPv4 y una IPv6. La PC intentó conectarse usando la IPv6 ya que la prefiere, sin embargo,nunca llegó a la Pi, por lo que cambió a la IPv4 y logró acceder con ella, pidiendo la passphrase.
+**Diagnóstico:** la regla que permite SSH solo cubre mi red IPv4 (192.168.1.0/24). Al conectarme con `rpi-lab.local`, el nombre resolvía a dos IPs, una IPv4 y una IPv6. La PC intentó conectarse primero por IPv6, ya que la prefiere; sin embargo, nunca llegó a la Pi, por lo que cambió a IPv4 y logró acceder, pidiendo la passphrase.
 
 **Solución:** me conecto con `ssh -4` para forzar IPv4, y verifiqué que por IPv6 la conexión queda bloqueada.
 
@@ -152,3 +155,7 @@ sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
 **Solución:** con `sudo grep` encontré la línea que acepta el ping entrante.
 
 **Lo que aprendí:** distinguir un error de permisos de Linux de un bloqueo de red.
+
+---
+
+Registro completo de comandos: [notas.md](notas.md)
