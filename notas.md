@@ -55,3 +55,27 @@ To                         Action      From
   Esto ocurrió porque el nombre `rpi-lab.local` resolvía a una IPv4 y a una IPv6. Primero intentó entrar por IPv6; cuando el firewall la bloqueó, ssh se pasó a la IPv4, que sí está permitida. Eso fue fallback. Los segundos congelados fueron ssh esperando a que la IPv6 respondiera.
 
   Esto se comprobó quitándole a ssh el plan B: se forzó a que ssh usara únicamente IPv6, lo que dio como resultado "Connection timed out".
+
+
+## Pruebas del puerto 8000
+
+### Comandos
+```bash
+# Pi: servidor de prueba
+python3 -m http.server 8000
+# PC: intento de conexión
+curl --max-time 5 http://192.168.1.85:8000
+# Pi: abrir y luego cerrar el puerto
+sudo ufw allow from 192.168.1.0/24 to any port 8000 proto tcp
+sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
+```
+
+| Paso | Resultado | Qué demuestra |
+|---|---|---|
+| curl con el puerto cerrado | timeout tras 5003 ms | ufw descarta en silencio (no responde "rechazado") |
+| curl con el puerto abierto | HTML + `GET / 200` en la Pi | la regla abre exactamente ese puerto |
+| curl después de borrar la regla | timeout tras 5008 ms | borrar la regla sí cierra el puerto |
+| `ufw status verbose` | solo queda el 22 | la Pi quedó como estaba |
+
+### Lo que aprendí
+Corrí el servidor en `~`, así que expuso mi carpeta personal, incluidos `.ssh/` y `.bash_history`, a toda la red local mientras el puerto estuvo abierto. El firewall controla **quién** entra, pero no **qué** expone el servicio que abro. La próxima vez: servidor desde una carpeta vacía (`mkdir -p ~/prueba-http && cd ~/prueba-http`).
