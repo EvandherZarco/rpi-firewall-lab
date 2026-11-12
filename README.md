@@ -6,6 +6,12 @@ Es un servidor Linux headless (sin monitor ni teclado) en una Raspberry Pi 3 Mod
 
 Es un laboratorio para practicar acceso remoto seguro, configuración de un firewall con ufw y análisis de tráfico con Wireshark.
 
+**Qué demuestra:**
+- Acceso remoto seguro por SSH con llave ed25519 protegida con frase.
+- Firewall con ufw: deniega por defecto lo que entra, con una sola excepción (SSH desde la red local), verificada con pruebas en IPv4 e IPv6.
+- Análisis de tráfico con Wireshark para comprobar lo que hace el firewall: ping, saludo TCP y conexión bloqueada.
+- Diagnóstico de fallas documentado en la [bitácora](#bitácora): problema, causa, solución y lo que aprendí.
+
 ## Hardware y software
 
 - Raspberry Pi 3 Model B v1.2
@@ -30,6 +36,7 @@ Con contraseña, aunque SSH la manda cifrada, la contraseña completa llega a la
 
 La Pi obtiene su IP por DHCP del módem (en mi red quedó en 192.168.1.85). Como la asigna el módem, puede cambiar; reservarla está pendiente.
 - PC (192.168.1.100), misma red 192.168.1.0/24, sin router entre ellas
+- La Pi también tiene la WiFi activa (`wlan0`, 192.168.0.156/24), en otra red. La política de ufw (denegar lo que entra) aplica a todas las interfaces y la regla de SSH solo admite la red 192.168.1.0/24, pero las pruebas las hice solo por cable.
 
 ## Firewall con ufw
 
@@ -60,8 +67,8 @@ To                         Action      From
 ## Prueba de puerto bloqueado y abierto
 
 ```bash
-# Pi: servidor de prueba
-python3 -m http.server 8000
+# Pi: servidor de prueba desde una carpeta temporal vacía (ver bitácora del 11/11)
+python3 -m http.server 8000 --directory "$(mktemp -d)"
 # PC: intento de conexión
 curl --max-time 5 http://192.168.1.85:8000
 # Pi: abrir y luego cerrar el puerto
@@ -109,6 +116,7 @@ sudo ufw delete allow from 192.168.1.0/24 to any port 8000 proto tcp
 **Límites**
 - La IP la asigna el módem por DHCP; si cambia, los comandos con 192.168.1.85 dejan de servir. Reservarla está pendiente.
 - ufw protege solo a la Pi, no al resto de la red.
+- La WiFi (`wlan0`) sigue activa y no la probé. Apagarla reduciría las entradas a la Pi; está pendiente.
 - Las pruebas las hice desde un solo equipo, dentro de la misma red.
 - Las capturas se tomaron desde mi PC, no desde la Pi: muestran lo que mi PC envió y recibió.
 
